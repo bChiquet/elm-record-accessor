@@ -92,7 +92,7 @@ meetFriendsAt : Booking -> Social -> Social
 meetFriendsAt ({when} as book) soc : 
     soc
     |> (l.bookings) (\books -> book :: books)
-    |> (l.people << l.friends << oneEach << l.nextMeeting) (set when)
+    |> (l.people << l.friends << onEach << l.nextMeeting) (set when)
 ```
 
 ## Drawbacks of this approach
@@ -102,3 +102,64 @@ A solution to bypass this is to generate the accessors for every field name in y
 
 Another drawback of this method compared to lenses in Haskell, is that you can not apply arbitrary operations on the accessor (get *and* set for instance).
 This is possible in Haskell but not in Elm, because the functor abstraction is not available in Elm.
+
+
+# Project notes
+## A way forward
+It seems the Elm compiler is very complicated for our needs, and not easily maintainable.
+A speciaized parser that only picks up names inside `{}` and `.accessors` would probably be easier to maintain. 
+Tasks to do for such a project include:
+* coding a parser for `elm-package.json` to get the dirs to visit,
+* coding a crawler that visits each dir and returns the list of `.elm`filepaths,
+* coding a parser for `.elm` files, returning a list of fields,
+* coding a generator creating the `Lens.elm` file including the stuff we're interested in.
+
+## Thoughts on the functor problem
+The [Focus package](https://github.com/evancz/focus/blob/2.0.2/src/Focus.elm) has a different approach to the problem. 
+Rather than returning the datastructure `(a -> a) -> (b -> b)`, they return `(a -> Focus a) -> b -> b`.
+A Focus is a record containing a getter and a setter for the structure.
+This lets them emulate the look and feel of haskell functors for a limited number of operations.
+However, the way it is coded means we lose generic composability.
+
+We could use a similar way of doing things while retaining composability:
+```elm
+lensField : Focus i a -> Focus i { b | field = a }
+lensField f = F { get = \b -> f.get b.field 
+                , over = \change -> (\b -> {b | field = f.over change b.field } ) }
+
+onEach : Focus i a -> Focus i (List a)
+onEach f = F { get = \list -> List.map f.get list
+             , over = \change -> (\list -> List.map (f.over change) list) }
+
+type Focus inner outer = F {get : (outer -> inner), over : (inner -> inner) -> (outer -> outer) }
+```
+
+All our lenses are now of the form `(Focus -> Focus)`.
+Therefore, we need an end focus to be able to splice the end of our Focus chain. 
+This Focus is, of course, the identity Focus.
+```elm
+idFocus :  Focus a a
+idFocus = F { get = \a -> a
+             , over = \change -> (\a -> change a) }
+```
+
+Since our lenses are no longer specifying operations, we need actions to perform on our foci.
+```elm
+get : (Focus i a -> Focus i b) -> b -> i
+get lens b = let focus = lens idFocus
+             in focus.get b
+
+set : (Focus i a -> Focus i b) -> i -> b -> b
+set lens newValue b = let focus = lens idFocus
+                      in focus.over (\_ -> i) b
+
+over : (Focus i a -> Focus i b) -> (i -> i) -> b -> b
+over lens change b = let focus = lens idFocus
+                     in focus.over change b
+```
+
+It is in general valued that lenses can serve both as getters and setters.
+However, we are mostly interested in records, specifically modifying them.
+Therefore, implementing the whole range of lens capabilities is not a priority for us.
+
+Also it is hard to decide what minimal set of operations a Focus should contain in order to fit any purpose.
