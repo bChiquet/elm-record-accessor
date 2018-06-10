@@ -109,8 +109,8 @@ This is possible in Haskell but not in Elm, because the functor abstraction is n
 It seems the Elm compiler is very complicated for our needs, and not easily maintainable.
 A speciaized parser that only picks up names inside `{}` and `.accessors` would probably be easier to maintain. 
 Tasks to do for such a project include:
-~~* coding a parser for `elm-package.json` to get the dirs to visit,~~ (ef9f95e)
-~~* coding a crawler that visits each dir and returns the list of `.elm`filepaths,~~ (ef9f95e)
+* ~~coding a parser for `elm-package.json` to get the dirs to visit,~~ (ef9f95e)
+* ~~coding a crawler that visits each dir and returns the list of `.elm`filepaths,~~ (ef9f95e)
 * coding a parser for `.elm` files, returning a list of fields,
 * coding a generator creating the `Lens.elm` file including the stuff we're interested in.
 
