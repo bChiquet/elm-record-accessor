@@ -27,6 +27,7 @@ library:
   - filemanip
   - attoparsec
   - text
+  - containers
 
 executables:
   elm-record-accessors-exe:

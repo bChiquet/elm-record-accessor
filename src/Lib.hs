@@ -20,6 +20,7 @@ import System.FilePath.Find
 import Data.Attoparsec.Text 
     (Parser
     , parse
+    , parseOnly
     , maybeResult
     , char
     , anyChar
@@ -30,18 +31,23 @@ import Data.Attoparsec.Text
     , endOfInput
     , takeWhile
     , manyTill
+    , letter
+    , skipSpace
+    , sepBy
     )
 import qualified Data.Text.IO as Text
 import qualified Data.Text as Text
 import Data.Maybe (fromMaybe)
+import Data.Either (fromRight)
+import Data.Char (isLower)
 import Prelude hiding (takeWhile)
 import Control.Monad (join)
-
-someFunc :: IO ()
-someFunc = putStrLn "someFunc"
+import Control.Applicative ((<|>))
+import Data.Set (fromList, toList)
 
 type Dir = String
 
+--checks if there is a elm-package.json
 getElmPackage :: IO (Maybe FilePath)
 getElmPackage = 
     find noRecursion (fileName ==? "elm-package.json") "."
@@ -49,6 +55,7 @@ getElmPackage =
       [pkg] -> return $ Just pkg
       _   -> return Nothing
 
+-- read the elm-package.json for a list of elm source roots.
 parseElmPackage :: FilePath -> IO [FilePath]
 parseElmPackage pkg = 
       fmap Text.unpack
@@ -57,6 +64,7 @@ parseElmPackage pkg =
   <$> parse package
   <$> Text.readFile pkg 
 
+-- Finds recursively all elm files in a list of roots
 crawlElmFiles :: [FilePath] -> IO [FilePath]
 crawlElmFiles = fmap join . sequence . fmap crawlElmRoot
 
@@ -82,17 +90,32 @@ filler = skipWhile (\c -> c/= '"' && c /= ']' && c /= '[')
 
 noRecursion = depth <? 1
 
-type Field = String
-parseRecordFields : FilePath -> IO [Field]
-parseRecordFields module =
-      fmap Text.unpack
-  <$> fromMaybe []
-  <$> MaybeResult
-  <$> parse fields
-  <$> Text.readFile module 
+type Field = Text.Text
 
-fields :: Parser [Text.Text]
-fields module = undefined
-  
-  
-  
+-- Parses record fields accessed in a list of source files
+parseRecordFields :: [FilePath] -> IO [Field]
+parseRecordFields = fmap unique . fmap join . sequence . fmap parseModuleRecordFields
+
+parseModuleRecordFields :: FilePath -> IO [Field]
+parseModuleRecordFields elmModule =
+      fromRight []
+  <$> parseOnly recAccess
+  <$> Text.readFile elmModule
+
+-- matcches all fieldAccess, remove capitalized and empty ones
+recAccess :: Parser [Field]
+recAccess = 
+        filter startsWithLower
+    <$> filter (/= "") 
+    <$> many' ((skipWhile (/= '.')) *> fieldAccess ) 
+
+-- match `.tutu` `.Titi` `.` etc
+fieldAccess :: Parser Field
+fieldAccess = 
+      Text.pack <$> (char '.' *> letters)
+
+letters = many' letter
+
+startsWithLower t = isLower $ Text.head t
+
+unique = toList . fromList
